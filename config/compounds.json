@@ -1,0 +1,22 @@
+{
+  "compounds": [
+    {
+      "name": "Soft",
+      "deg_coeff": 0.04,
+      "cliff_threshold": 18,
+      "cliff_multiplier": 3.0
+    },
+    {
+      "name": "Medium",
+      "deg_coeff": 0.03,
+      "cliff_threshold": 24,
+      "cliff_multiplier": 3.0
+    },
+    {
+      "name": "Hard",
+      "deg_coeff": 0.02,
+      "cliff_threshold": 30,
+      "cliff_multiplier": 3.0
+    }
+  ]
+}

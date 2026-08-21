@@ -1,0 +1,18 @@
+{
+  "tracks": [
+    {
+      "name": "Monza",
+      "base_lap_time_s": 82.0,
+      "total_laps": 53,
+      "pit_lane_loss_s": 22.0,
+      "sc_probability": 0.12
+    },
+    {
+      "name": "Monaco",
+      "base_lap_time_s": 74.0,
+      "total_laps": 78,
+      "pit_lane_loss_s": 25.0,
+      "sc_probability": 0.30
+    }
+  ]
+}

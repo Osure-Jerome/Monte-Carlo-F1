@@ -1,0 +1,14 @@
+# Core runtime
+numpy>=1.26
+scipy>=1.11
+pandas>=2.0
+
+# Dashboard + charts
+streamlit>=1.30
+plotly>=5.18
+
+# Scratch validation plots
+matplotlib>=3.8
+
+# Dev / test
+pytest>=7.4
