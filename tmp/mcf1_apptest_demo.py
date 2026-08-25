@@ -38,7 +38,6 @@ DEFAULT_ITERATIONS = 100_000
 DEFAULT_SEED = 42  # NFR-6: one master seed for BOTH strategies (paired runs)
 DB_PATH = Path(__file__).parent / "data" / "results.db"
 
-#: Track-specific defaults so a strategy always sums to the race length.
 DEFAULT_STRATEGIES = {
     "Monza": {"A": "Soft:18,Medium:20,Hard:15", "B": "Medium:35,Hard:18"},
     "Monaco": {"A": "Soft:18,Medium:25,Hard:35", "B": "Medium:40,Hard:38"},
@@ -156,7 +155,8 @@ if "batch_a" in st.session_state:
     fig.update_layout(title="Finishing-time distributions (PDF overlay)",
                       xaxis_title="Total race time (s)", yaxis_title="Density",
                       barmode="overlay")
-    st.plotly_chart(fig, use_container_width=True)
+
+    st.plotly_chart(fig, width="stretch")
 
     # --- Lap trace (FR-15): first sampled run of each strategy ---
     traces_a = batch_a.sample_traces()
@@ -170,7 +170,8 @@ if "batch_a" in st.session_state:
             trace_fig.add_trace(go.Scatter(x=laps, y=times, mode="lines", name=label))
         trace_fig.update_layout(title="Representative lap trace (lap time vs lap)",
                                 xaxis_title="Lap", yaxis_title="Lap time (s)")
-        st.plotly_chart(trace_fig, use_container_width=True)
+
+        st.plotly_chart(trace_fig, width="stretch")
     else:
         st.warning("No lap traces stored — run with default sampling (first 100 runs) to see traces.")
 
