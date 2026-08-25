@@ -22,8 +22,14 @@ notebooks/*.html
 .vscode/
 *.swp
 .DS_Store
+.agents/
+.claude/
+tmp/
 
 # --- Test / coverage ---
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Sprint 2 (generated 100k CSVs — regenerate via CLI --csv)
+data/sprint2/*.csv
