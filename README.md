@@ -67,7 +67,34 @@ streamlit run dashboard.py
 
 - [x] `docs/` — architecture, database schema, PRD
 - [x] Package layout scaffolded (all layers present, core engine implemented)
-- [ ] Sprint 1 — deterministic physics engine validation (see build order in `docs/architecture.md`)
-- [ ] Sprint 2 — stochastic layer + 100k scaling
+- [x] Sprint 1 — deterministic physics engine validation
+- [x] Sprint 2 — stochastic layer + 100k scaling
 - [ ] Sprint 3 — dashboard wired to persisted results
 - [ ] Sprint 4 (bonus) — genetic-algorithm optimisation
+
+## Sprint 2 (delivered)
+
+- **Stochastic layer** — Gaussian driver noise drawn every lap (FR-6), plus a
+  **Safety-Car state machine**: a per-lap Bernoulli trigger (track
+  `sc_probability`) deploys the SC for `sc_duration_laps` laps (default 3),
+  during which degradation is suspended and a fixed `sc_delta_s` (default 5 s)
+  is added per lap. See `docs/PRD.md` and `notes/speedup.md`.
+- **100k scaling via NumPy vectorisation** — `RaceEngine.simulate_batch` runs
+  the lap loop over N-element arrays (~6× faster than the scalar loop at 1k
+  runs; ~14.4 s → ~1.9 s for 100k runs). `MonteCarloRunner` splits batches into
+  vectorised chunks across a `multiprocessing.Pool` (tested, reproducible).
+- **Artifacts** — `notebooks/sprint2_histogram.png` (Day 1 bell curve),
+  `notes/speedup.md` (Day 3/4 benchmarks), `data/sprint2/*.csv` (Day 5 100k
+  results), `tests/test_batch.py` (Sprint 2 verification incl. the Day-3
+  loop-vs-vectorised checkpoint).
+
+New CLI flags:
+
+```bash
+python -m f1strategist.cli --track Monaco \
+    --strategy-a "Soft:18,Medium:25,Hard:35" \
+    --strategy-b "Medium:40,Hard:38" \
+    --iterations 100000 --parallel \
+    --sc-duration 3 --sc-delta 5 \
+    --csv data/sprint2/sprint2_100k.csv   # per-run totals (Day 5)
+```

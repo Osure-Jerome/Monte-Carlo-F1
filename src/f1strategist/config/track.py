@@ -4,9 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-#: Fixed pace delta (s) applied to every lap run behind the Safety Car.
-SC_DELTA_S = 25.0
-
 
 @dataclass(frozen=True, slots=True)
 class Track:
@@ -18,6 +15,8 @@ class Track:
         total_laps: Race distance in laps.
         pit_lane_loss_s: Fixed pit-stop time penalty (s).
         sc_probability: Per-lap Bernoulli probability of a Safety Car trigger.
+            (The SC state machine — duration and per-lap delta — is configured
+            on the ``RaceEngine`` per Sprint 2.)
     """
 
     name: str

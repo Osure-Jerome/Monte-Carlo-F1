@@ -6,7 +6,7 @@
 | **Version** | 1.0 (Phases 1–2) |
 | **Author** | Jerome Maunga |
 | **Date** | August 2026 |
-| **Status** | Approved for implementation |
+| **Status** | Approved for implementation; **Sprints 1–2 delivered** (Sprint 3 dashboard in progress) |
 | **Related docs** | `docs/architecture.md`, `docs/database_schema.md`, `Monte Carlo F1 Project Strategy.pdf`, `Phases 1-2 Blueprint.docx` |
 
 ---
@@ -159,9 +159,9 @@ In modern motorsports, strategic pit-stop calls often decide races. Yet amateur 
 | Pit-stop loss | 22–25 s | slider range 20–30 s in dashboard |
 | Tyre compounds | Soft / Medium / Hard | distinct `deg_coeff`, `cliff_threshold` |
 | Degradation model | piecewise quadratic | `α·age²` pre-cliff; `α·t² + 3α·(age−t)²` post-cliff |
-| Driver noise σ | 0.15 s | per-lap Gaussian; may become track-specific later |
-| SC delta | 25 s | fixed pace delta on affected lap; degradation suspended |
-| SC probability | Monza 0.12 / Monaco 0.30 | per-lap Bernoulli, track-specific |
+| Driver noise σ | 0.15 s | per-lap Gaussian (Sprint 2 Day 1); may become track-specific later |
+| SC state machine | 3-lap duration, +5 s/lap | Sprint 2 Day 2: per-lap Bernoulli trigger (`sc_probability`); degradation suspended while active; `sc_duration_laps` / `sc_delta_s` configurable |
+| SC probability | Monza 0.12 / Monaco 0.30 | per-lap Bernoulli, track-specific; stationary SC-affected lap fraction = `3p/(1+2p)` |
 | Iterations | 100,000 | per strategy |
 
 ### 8.2 Dashboard Screens & Interactions
@@ -246,7 +246,7 @@ In modern motorsports, strategic pit-stop calls often decide races. Yet amateur 
 | Driver σ as global constant vs track-specific | Realism of street-circuit variance | Keep constant for Sprint 1; revisit in calibration |
 | Sensitivity generality limited to one slider | FR-14 scope | Fuel-effect slider requires richer denormalisation or re-simulation — deferred |
 | Bulk write: single transaction vs chunked | Peak RAM on 200k-row inserts | Start single-transaction `executemany`; benchmark, chunk if needed |
-| SC realism (fixed 25 s delta vs 3-lap neutralisation) | Fidelity vs complexity | Fixed delta per the blueprint; Poisson/3-lap variant is a documented extension |
+| SC realism (fixed 25 s delta vs 3-lap neutralisation) | Fidelity vs complexity | **Resolved (Sprint 2):** 3-lap state machine with per-lap +5 s delta and degradation suspension implemented and verified (`tests/test_batch.py`) |
 | Win-probability pairing method | Statistical validity | Paired runs by `sim_index` (same seeds for A and B) — reduces variance and is the honest head-to-head comparison |
 
 ---

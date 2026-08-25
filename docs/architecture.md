@@ -60,9 +60,10 @@ The system is a **Monte Carlo race-simulation engine** paired with an **interact
 - Indexed for `O(log n)` win-probability queries and sub-second interaction budget (NFR-5).
 
 ### 2.3 Simulation / Domain Layer — RaceEngine + MonteCarloRunner
-- **Files:** `engine.py`, `montecarlo.py`
+- **Files:** `race_engine.py`, `montecarlo.py`
 - `RaceEngine.simulate_race(strategy, seed) → RunResult` — a **pure function**: no I/O, no globals, no shared mutable state. Uses `np.random.Generator` seeded per call (NFR-6 reproducibility).
-- `MonteCarloRunner` owns a `RaceEngine` and distributes `(engine, strategy, seed_i)` tuples across a `multiprocessing.Pool` via `starmap` (NFR-2, ~90 s for 100k iterations on 8 cores).
+- `RaceEngine.simulate_batch(strategy, n_iterations, master_seed) → BatchResult` — the Sprint 2 **vectorised** path: the lap loop runs once per lap over N-element NumPy arrays (SC state and tyre age evolve per run). Totals are identical to the scalar loop on the same seed (Day-3 checkpoint, `tests/test_batch.py`).
+- `MonteCarloRunner` splits a batch into `~n_iterations / n_workers` vectorised chunks across a `multiprocessing.Pool` via `starmap` (NFR-2). On the Sprint-2 hardware the fully vectorised engine already finishes 100k runs in ~2 s sequentially, so pool overhead dominates at that size — a documented Amdahl crossover (`notes/speedup.md`).
 
 ### 2.4 Configuration Layer — TyreCompound, Track, Car
 - Frozen dataclasses; one instance per entity. Loaded from config entries (NFR-12 Open/Closed: adding a compound/track = new config entry only).
@@ -103,24 +104,36 @@ The system is a **Monte Carlo race-simulation engine** paired with an **interact
 
 ---
 
-## 4. Simulation Inner Loop — `_simulate_lap()`
+## 4. Simulation Inner Loop — `_simulate_lap()` (Sprint 2)
 
-Executed `70 × N` times per batch. Sequence per lap:
+Executed `L × N` times per batch. Sequence per lap (per run):
 
 ```
-1. Draw  u ~ Bernoulli(sc_probability)
-2. IF safety car:
-       lap_time = base_lap_time + SC_DELTA_S (25 s)
-       tyre_age_increment = 0                    # degradation suspended
-3. ELSE:
+1. Draw  u ~ Bernoulli(sc_probability)          # consumed every lap
+2. Draw  v ~ N(0, driver_sigma)                 # consumed every lap (keeps batch RNG identical)
+3. IF the SC state machine is active:
+       lap_time = base_lap_time + sc_delta_s    # default +5 s per SC lap
+       tyre_age_increment = 0                   # degradation suspended under SC
+4. ELIF u < sc_probability:
+       enter the SC for sc_duration_laps laps (default 3); this lap is SC lap 1
+       -> same as step 3
+5. ELSE (normal racing lap):
        lap_time = base_lap_time
                 + compound.degradation(tyre_age)
                 + car.fuel_time_penalty(fuel_remaining)
-                + rng.normal(0, driver_sigma)
-4. Build LapResult (only if run ∈ sampled set, sim_index < 100)
+                + v
+       tyre_age_increment = 1
+6. Build LapResult (only if run ∈ sampled set, sim_index < 100)
 ```
 
-**Strategic implication of step 2:** a late Safety Car neutralises the pit-stop cost — the team can change tires "for free". This is intentionally modelled and is a headline differentiator of the engine.
+The Safety Car is a **state machine** (Sprint 2 Day 2): one Bernoulli trigger
+deploys it for `sc_duration_laps` laps, re-triggering is disabled while it is
+active, and tyre degradation is frozen for the whole deployment. Stationary
+SC-affected lap fraction = `3p / (1 + 2p)` (verified in `tests/test_batch.py`).
+
+**Strategic implication of step 3/4:** a late Safety Car neutralises the
+pit-stop cost — the team can change tires "for free". This is intentionally
+modelled and is a headline differentiator of the engine.
 
 ### Tire degradation formula (TyreCompound.degradation)
 
@@ -150,8 +163,8 @@ Example (Soft: α = 0.04, cliff = lap 18, β = 0.12):
 Dashboard → SimulationRepository.load_config (tracks, compounds)
           → build RaceStrategy objects from UI form
           → MonteCarloRunner.run(batch spec)          # engine never touched by UI
-          → per-worker: RaceEngine.simulate_race(strategy, seed_i)
-          → BatchResult assembled
+          → per-worker: RaceEngine.simulate_batch(strategy, chunk_size, chunk_seed)
+          → BatchResult assembled from chunk results
           → SimulationRepository.save_batch(batch)    # 1 transaction
           → StatisticsEngine computes stats
           → Dashboard renders PDF overlay / lap traces
@@ -171,10 +184,10 @@ The `pit_stop_count` column is denormalised onto each `simulation_run` row to ma
 
 ## 6. Concurrency & Parallelism Model
 
-- **Granularity:** one worker = one strategy run for one seed. Work is embarrassingly parallel (each seed independent), so `multiprocessing.Pool.starmap` distributes `(engine, strategy, seed_i)` tuples.
-- **Determinism:** each worker seeds its own `np.random.Generator(seed_i)`; batch seeds derive from one master seed so results are reproducible (NFR-6).
+- **Granularity:** one worker = one **vectorised chunk** of `~n_iterations/n_workers` runs (Sprint 2); the lap loop is vectorised over the chunk's run dimension. Work is embarrassingly parallel, so `multiprocessing.Pool.starmap` distributes `(chunk_seed, chunk_size, offset)` tuples.
+- **Determinism:** the batch RNG draws per lap in run-major order (`rng.random(n)` then `rng.normal(0, σ, n)`), so `simulate_batch(N=1, seed)` reproduces `simulate_race(seed)` exactly; chunk seeds derive from one master seed (NFR-6).
 - **I/O:** workers never touch SQLite; the parent process performs the single bulk write. No shared mutable state → no GIL contention on NumPy vectorised math.
-- **Why not Ray / threading:** Ray adds a scheduler we don't need for one 8-core machine; the GIL makes threads unsuitable for Python numeric loops. Stdlib multiprocessing gives the ~90 s target (NFR-2) with zero extra dependencies.
+- **Why not Ray / threading:** Ray adds a scheduler we don't need for one machine; the GIL makes threads unsuitable for Python numeric loops. Stdlib multiprocessing gives the target (NFR-2) with zero extra dependencies. Sprint-2 vectorisation alone reaches ~2 s / 100k runs sequentially, so multiprocessing is retained for very large N / many-core hosts (`notes/speedup.md`).
 
 ---
 
@@ -242,7 +255,7 @@ monte-carlo-f1/
 | 6 | `pit_stop_count` denormalised on `simulation_run` | Enables sub-second sensitivity recomputation (FR-14 / NFR-3) |
 | 7 | Strategies normalised into `strategy` + `strategy_stint` rows | GA writes novel strategies through the same schema (FR-17) |
 | 8 | Hand-rolled GA instead of DEAP | Portfolio value; makes optimisation syllabus link concrete |
-| 9 | NumPy vectorisation + multiprocessing | Hits NFR-1 (<200 ms/run) and NFR-2 (≤90 s/100k) without compiled bindings |
+| 9 | NumPy vectorisation + multiprocessing | Hits NFR-1 (<200 ms/run) and NFR-2 (≤90 s/100k) without compiled bindings; Sprint-2 vectorisation alone reaches ~2 s/100k (notes/speedup.md) |
 
 ---
 
@@ -255,7 +268,7 @@ monte-carlo-f1/
 
 ---
 
-## 11. Build Order (Phase 3 Sprint 1, dependency-ordered)
+## 11. Build Order (Sprint 1 — completed)
 
 1. `TyreCompound`, `Track`, `Car` frozen dataclasses + unit tests
 2. `Stint`, `RaceStrategy` with validation
@@ -267,3 +280,13 @@ monte-carlo-f1/
 8. Streamlit dashboard — the *last* layer, reading only from SQLite
 
 > The database and UI are built last — the engine is validated mathematically before any presentation concerns are introduced.
+
+## 12. Sprint 2 — Stochastic layer + 100k scaling (completed)
+
+1. Day 1 — Gaussian driver noise drawn every lap (FR-6) + 1,000-run histogram bell curve (`notebooks/sprint2_histogram.png`)
+2. Day 2 — Safety-Car state machine (`sc_duration_laps`, `sc_delta_s`) with degradation suspension
+3. Day 3 — `simulate_batch` vectorised over NumPy arrays; identical-totals checkpoint vs. the scalar loop
+4. Day 4 — `MonteCarloRunner` chunked parallel scaling + sequential-vs-parallel measurements (`notes/speedup.md`)
+5. Day 5 — 100k statistics, ±1 % stability verification, per-run CSV export (`--csv`)
+
+Deliverables: `tests/test_batch.py`, `scripts/sprint2_deliverables.py`, `notes/speedup.md`, `data/sprint2/*.csv`.

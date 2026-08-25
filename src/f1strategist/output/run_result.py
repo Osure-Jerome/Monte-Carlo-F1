@@ -52,6 +52,11 @@ class BatchResult:
         return np.asarray([r.pit_stop_count for r in self.runs], dtype=np.int64)
 
     @property
+    def sc_laps(self) -> np.ndarray:
+        """Vectorised Safety-Car-affected lap counts for every run."""
+        return np.asarray([r.sc_laps for r in self.runs], dtype=np.int64)
+
+    @property
     def n_runs(self) -> int:
         return len(self.runs)
 
