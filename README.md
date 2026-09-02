@@ -143,6 +143,10 @@ streamlit run dashboard.py            # -> http://localhost:8501
 1. Push this branch to GitHub: `git push -u origin Sprint-3`.
 2. Go to <https://share.streamlit.io> (or streamlit.io/cloud) → **Create app** →
    point at this repo, branch `Sprint-3`, file `dashboard.py`.
+
+   > No extra setup needed: `dashboard.py` bootstraps the `src/` layout onto
+   > `sys.path` itself, so it imports `f1strategist` even though Streamlit Cloud
+   > only installs `requirements.txt` (and not `pip install -e .`).
 3. Paste the resulting public URL below, then open it in an **incognito window** to
    confirm it runs with no local dependencies.
 4. Record a ~3-minute walkthrough (Loom/YouTube) and embed the link below.

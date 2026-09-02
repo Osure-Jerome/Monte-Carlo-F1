@@ -20,7 +20,17 @@ Run with:
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
+
+# The package uses a ``src/`` layout. Streamlit Cloud installs only
+# ``requirements.txt`` (which intentionally does NOT ``pip install -e .``), so
+# ``f1strategist`` would be un-importable there. Bootstrap the repo's ``src/``
+# directory onto sys.path to make this entrypoint work regardless of whether
+# the package is pip-installed.
+_SRC_DIR = Path(__file__).resolve().parent / "src"
+if str(_SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(_SRC_DIR))
 
 import numpy as np
 import streamlit as st
