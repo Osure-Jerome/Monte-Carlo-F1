@@ -14,6 +14,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Optional
 
+from f1strategist.output.lap_result import LapResult
 from f1strategist.output.run_result import BatchResult, RunResult
 from f1strategist.strategy.race_strategy import RaceStrategy
 
@@ -276,6 +277,17 @@ class SimulationRepository:
     def _upsert_strategy(
         self, conn: sqlite3.Connection, strategy: RaceStrategy, track_id: int
     ) -> int:
+        # Tyre compounds must exist before strategy_stint rows can reference them.
+        compound_ids: dict[str, int] = {}
+        for stint in strategy.stints:
+            compound = stint.tyre_compound
+            compound_ids[compound.name] = self._get_or_insert(
+                conn, "tyre_compound", name=compound.name,
+                deg_coeff=compound.deg_coeff,
+                cliff_threshold=compound.cliff_threshold,
+                cliff_multiplier=compound.cliff_multiplier,
+            )
+
         row = conn.execute(
             "SELECT id FROM strategy WHERE name=? AND track_id=? AND source=?",
             (strategy.name, track_id, strategy.source),
@@ -289,10 +301,12 @@ class SimulationRepository:
         )
         strategy_id = int(cur.lastrowid)
         conn.executemany(
-            """INSERT INTO strategy_stint (strategy_id, stint_index, tyre_compound_id, stint_laps)
-               SELECT ?, ?, id, ? FROM tyre_compound WHERE name = ?""",
+            """INSERT INTO strategy_stint
+               (strategy_id, stint_index, tyre_compound_id, stint_laps)
+               VALUES (?, ?, ?, ?)""",
             [
-                (strategy_id, idx, stint.stint_laps, stint.tyre_compound.name)
+                (strategy_id, idx, compound_ids[stint.tyre_compound.name],
+                 stint.stint_laps)
                 for idx, stint in enumerate(strategy.stints)
             ],
         )
@@ -301,6 +315,33 @@ class SimulationRepository:
     # ------------------------------------------------------------------
     # Loading
     # ------------------------------------------------------------------
+    def find_batch(
+        self,
+        track_name: str,
+        n_iterations: int,
+        master_seed: int,
+        strategy_a_name: str,
+        strategy_b_name: str,
+    ) -> Optional[int]:
+        """Return the id of an identical stored batch, or ``None``.
+
+        Lets the dashboard / populate script persist an experiment
+        idempotently instead of duplicating identical 100k-run batches.
+        """
+        row = self._conn().execute(
+            """SELECT b.id
+               FROM simulation_batch b
+               JOIN track t ON t.id = b.track_id
+               JOIN strategy sa ON sa.id = b.strategy_a_id
+               JOIN strategy sb ON sb.id = b.strategy_b_id
+               WHERE t.name = ? AND b.n_iterations = ? AND b.master_seed = ?
+                 AND sa.name = ? AND sb.name = ?
+               ORDER BY b.id LIMIT 1""",
+            (track_name, n_iterations, master_seed,
+             strategy_a_name, strategy_b_name),
+        ).fetchone()
+        return int(row[0]) if row else None
+
     def list_batches(self) -> list[dict[str, Any]]:
         """Summary rows for every stored batch (newest first)."""
         conn = self._conn()
@@ -371,3 +412,74 @@ class SimulationRepository:
                       pit_stop_count=r[2], sc_laps=r[3])
             for r in rows
         )
+
+    def load_lap_traces(
+        self, batch_id: int, strategy_id: int
+    ) -> list[tuple[int, tuple[LapResult, ...]]]:
+        """Reconstruct sampled lap traces for one strategy in a batch.
+
+        Only runs that were saved with full lap detail (the ``sim_index < 100``
+        FR-15 sampling policy) come back. Returns ``[(sim_index, lap_trace), ...]``
+        ordered by ``sim_index`` so the dashboard can draw the lap-trace chart
+        from stored data without re-simulating.
+        """
+        conn = self._conn()
+        rows = conn.execute(
+            """SELECT sr.sim_index, lr.lap_number, lr.lap_time_s,
+                      lr.cumulative_time_s, lr.tyre_age, lr.fuel_remaining_kg,
+                      lr.safety_car, lr.stint_index
+               FROM lap_result lr
+               JOIN simulation_run sr ON sr.id = lr.run_id
+               WHERE sr.batch_id = ? AND sr.strategy_id = ?
+               ORDER BY sr.sim_index, lr.lap_number""",
+            (batch_id, strategy_id),
+        ).fetchall()
+        traces: dict[int, list[LapResult]] = {}
+        for r in rows:
+            trace = traces.setdefault(int(r[0]), [])
+            trace.append(
+                LapResult(
+                    lap_number=int(r[1]),
+                    lap_time_s=float(r[2]),
+                    cumulative_time_s=float(r[3]),
+                    tyre_age=int(r[4]),
+                    fuel_remaining_kg=float(r[5]),
+                    safety_car=bool(r[6]),
+                    stint_index=int(r[7]),
+                )
+            )
+        return [(idx, tuple(laps)) for idx, laps in sorted(traces.items())]
+
+    def _strategy_meta(self, conn: sqlite3.Connection, strategy_id: int) -> dict[str, Any]:
+        """Name, source and stint description for a stored strategy."""
+        row = conn.execute(
+            "SELECT name, source FROM strategy WHERE id = ?", (strategy_id,)
+        ).fetchone()
+        stints = conn.execute(
+            """SELECT tc.name, ss.stint_laps
+               FROM strategy_stint ss
+               JOIN tyre_compound tc ON tc.id = ss.tyre_compound_id
+               WHERE ss.strategy_id = ?
+               ORDER BY ss.stint_index""",
+            (strategy_id,),
+        ).fetchall()
+        return {
+            "name": row[0],
+            "source": row[1],
+            "desc": ",".join(f"{c}:{laps}" for c, laps in stints),
+        }
+
+    def load_batch(self, batch_id: int) -> dict[str, Any]:
+        """One-stop dashboard load: metadata + runs + lap traces for a batch.
+
+        Returns everything the UI needs to render from SQLite (the Sprint 3
+        Day-2 read path) — totals, pit counts, SC laps, strategy descriptors
+        and the sampled lap traces — so no physics re-run is required.
+        """
+        info = self.load_runs(batch_id)
+        conn = self._conn()
+        info["strategy_a_meta"] = self._strategy_meta(conn, info["strategy_a_id"])
+        info["strategy_b_meta"] = self._strategy_meta(conn, info["strategy_b_id"])
+        info["traces_a"] = self.load_lap_traces(batch_id, info["strategy_a_id"])
+        info["traces_b"] = self.load_lap_traces(batch_id, info["strategy_b_id"])
+        return info

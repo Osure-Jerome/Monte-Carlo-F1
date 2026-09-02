@@ -69,7 +69,9 @@ streamlit run dashboard.py
 - [x] Package layout scaffolded (all layers present, core engine implemented)
 - [x] Sprint 1 — deterministic physics engine validation
 - [x] Sprint 2 — stochastic layer + 100k scaling
-- [ ] Sprint 3 — dashboard wired to persisted results
+- [x] Sprint 3 — interactive dashboard (PDF overlay, sensitivity slider, win-rate line,
+      sensitivity heatmap, lap traces) wired to persisted SQLite results
+- [ ] Sprint 3 deploy — Streamlit Cloud URL + demo video (manual steps, see “Deploy” below)
 - [ ] Sprint 4 (bonus) — genetic-algorithm optimisation
 
 ## Sprint 2 (delivered)
@@ -98,3 +100,53 @@ python -m f1strategist.cli --track Monaco \
     --sc-duration 3 --sc-delta 5 \
     --csv data/sprint2/sprint2_100k.csv   # per-run totals (Day 5)
 ```
+
+## Sprint 3 (delivered)
+
+The dashboard reads **only** from in-memory results (or stored SQLite rows) while you
+interact — it never re-runs physics on a widget change (NFR-3, NFR-8).
+
+- **Saved experiments (SQLite)** — every persisted batch is browsable under
+  *Saved experiments* and can be rendered straight from `data/results.db`, with no
+  re-simulation. See `scripts/sprint3_populate_db.py` to seed the database with the
+  full 100k-run Sprint 2 output:
+
+  ```bash
+  python scripts/sprint3_populate_db.py          # append missing experiments
+  python scripts/sprint3_populate_db.py --reset  # rebuild data/results.db from scratch
+  ```
+
+  Day-2 checkpoint verified on the seeded database: a `strategy_name`-filtered query
+  over a 100k-run batch returns in **~70 ms** (target: < 1 s).
+- **PDF overlay (Day 3)** — overlapping `probability density` histograms with a
+  SciPy `gaussian_kde` smooth line per strategy.
+- **Sensitivity slider (Day 4)** — a 20–30 s pit-stop-loss slider re-derives every
+  chart in-memory from the stored `pit_stop_count` column (sub-second, no physics).
+- **Win-rate sensitivity line & 2-D sensitivity heatmap** — P(A beats B) across the
+  shared pit loss, plus a heatmap over asymmetric (A × B) pit losses → **4 chart
+  types** in total (PDF overlay, lap traces, win-rate line, sensitivity heatmap).
+- **Lap-trace plot (FR-15)** — representative lap-time trace from sampled runs
+  (`sim_index < 100`), restored from the database on load.
+- **Repo fix** — `save_batch` now persists `tyre_compound` + `strategy_stint` rows, so
+  stored strategies keep their full stint descriptions.
+- **Tests** — added statistics sweep/grid unit tests and repository DB-load integration
+  tests (53 total pass).
+
+```bash
+# Re-seed the DB with the Sprint-2 100k output, then launch
+python scripts/sprint3_populate_db.py --reset
+streamlit run dashboard.py            # -> http://localhost:8501
+```
+
+## Deploy (Day 5 — manual steps)
+
+1. Push this branch to GitHub: `git push -u origin Sprint-3`.
+2. Go to <https://share.streamlit.io> (or streamlit.io/cloud) → **Create app** →
+   point at this repo, branch `Sprint-3`, file `dashboard.py`.
+3. Paste the resulting public URL below, then open it in an **incognito window** to
+   confirm it runs with no local dependencies.
+4. Record a ~3-minute walkthrough (Loom/YouTube) and embed the link below.
+
+> **Live URL:** _pending — paste Streamlit Cloud URL here_
+>
+> **Demo video:** _pending — paste video link here_

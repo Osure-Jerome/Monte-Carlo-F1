@@ -91,6 +91,75 @@ class StatisticsEngine:
         return times - (old_pit_s * counts) + (new_pit_s * counts)
 
     @staticmethod
+    def win_rate_vs_pit_loss(
+        times_a: np.ndarray,
+        times_b: np.ndarray,
+        pit_counts_a: np.ndarray,
+        pit_counts_b: np.ndarray,
+        old_pit_s: float,
+        losses: np.ndarray,
+    ) -> np.ndarray:
+        """P(A beats B) when both strategies share pit-stop loss ``s`` (Sprint 3).
+
+        Sweeps ``s`` over ``losses`` (e.g. 20..30 s) and returns one win
+        probability per candidate loss. Every point is re-derived in-memory
+        from the stored ``pit_stop_count`` columns via :meth:`sensitivity` —
+        no physics re-run, no SQLite touch (the Day-4 sensitivity deliverable).
+
+        Args:
+            times_a / times_b: Stored paired total times.
+            pit_counts_a / pit_counts_b: Per-run pit-stop counts (denormalised).
+            old_pit_s: Pit-stop loss the stored times were simulated with.
+            losses: Candidate pit-stop losses (s) to sweep.
+
+        Returns:
+            Array of win probabilities, one per entry of ``losses``.
+        """
+        losses = np.asarray(losses, dtype=np.float64)
+        out = np.empty(losses.size)
+        for i, loss in enumerate(losses):
+            adj_a = StatisticsEngine.sensitivity(
+                times_a, pit_counts_a, old_pit_s, loss
+            )
+            adj_b = StatisticsEngine.sensitivity(
+                times_b, pit_counts_b, old_pit_s, loss
+            )
+            out[i] = StatisticsEngine.win_probability(adj_a, adj_b)
+        return out
+
+    @staticmethod
+    def win_rate_grid(
+        times_a: np.ndarray,
+        times_b: np.ndarray,
+        pit_counts_a: np.ndarray,
+        pit_counts_b: np.ndarray,
+        old_pit_s: float,
+        losses_a: np.ndarray,
+        losses_b: np.ndarray,
+    ) -> np.ndarray:
+        """2-D P(A beats B) over (loss_a, loss_b) — the sensitivity heatmap.
+
+        Allows an *asymmetric* pit-stop loss per strategy (realistic: rival
+        teams have different pit crews). Returns a matrix ``grid[i, j]`` with
+        ``i`` indexing ``losses_b`` (rows / y-axis) and ``j`` indexing
+        ``losses_a`` (columns / x-axis). Pure in-memory recomputation from
+        stored pit counts; sub-second at 100k runs (NFR-3).
+        """
+        losses_a = np.asarray(losses_a, dtype=np.float64)
+        losses_b = np.asarray(losses_b, dtype=np.float64)
+        grid = np.empty((losses_b.size, losses_a.size))
+        for j, loss_a in enumerate(losses_a):
+            adj_a = StatisticsEngine.sensitivity(
+                times_a, pit_counts_a, old_pit_s, loss_a
+            )
+            for i, loss_b in enumerate(losses_b):
+                adj_b = StatisticsEngine.sensitivity(
+                    times_b, pit_counts_b, old_pit_s, loss_b
+                )
+                grid[i, j] = StatisticsEngine.win_probability(adj_a, adj_b)
+        return grid
+
+    @staticmethod
     def kde(sample: np.ndarray, n_points: int = 200) -> tuple[np.ndarray, np.ndarray]:
         """Smooth kernel-density estimate for the PDF overlay (FR-13).
 

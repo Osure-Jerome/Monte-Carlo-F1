@@ -71,3 +71,58 @@ class TestKDE:
     def test_too_few_samples_rejected(self):
         with pytest.raises(ValueError):
             S.kde(np.array([1.0]))
+
+
+class TestWinRateSweep:
+    """Day-4 sensitivity: win probability vs shared pit-stop loss (Sprint 3)."""
+
+    def test_same_strategy_is_flat_at_half(self):
+        rng = np.random.default_rng(3)
+        times_a = rng.normal(100, 5, 20_000)
+        times_b = rng.normal(100, 5, 20_000)  # same distribution ~ 50/50
+        counts = np.full_like(times_a, 2, dtype=np.int64)
+        losses = np.linspace(20.0, 30.0, 11)
+        wins = S.win_rate_vs_pit_loss(times_a, times_b, counts, counts, 22.0, losses)
+        assert wins.shape == losses.shape
+        # Equal pit counts -> the loss shift cancels -> win rate is flat, ~50/50.
+        assert np.allclose(wins, wins[0], atol=0.005)
+        assert abs(wins[0] - 0.5) < 0.05
+
+    def test_lower_pit_loss_preferred_when_b_pits_less(self):
+        # B does 1 stop, A does 2: cheaper pits -> B benefits, P(A) drops.
+        rng = np.random.default_rng(4)
+        times_a = rng.normal(6000, 60, 40_000)  # equal base means
+        times_b = rng.normal(6000, 60, 40_000)
+        counts_a = np.full_like(times_a, 2, dtype=np.int64)
+        counts_b = np.full_like(times_b, 1, dtype=np.int64)
+        losses = np.linspace(20.0, 30.0, 21)
+        wins = S.win_rate_vs_pit_loss(times_a, times_b, counts_a, counts_b, 22.0, losses)
+        # P(A) must fall as pit-stop loss rises (A is hit twice as hard).
+        assert wins[0] > wins[-1]
+
+    def test_no_op_when_loss_unchanged(self):
+        rng = np.random.default_rng(5)
+        times = rng.normal(100, 4, 5000)
+        counts = np.full_like(times, 2, dtype=np.int64)
+        wins = S.win_rate_vs_pit_loss(times, times + 1, counts, counts, 22.0,
+                                      np.array([22.0]))
+        np.testing.assert_allclose(wins, S.win_probability(times, times + 1))
+
+
+class TestWinRateGrid:
+    """Day-4 sensitivity heatmap over asymmetric (loss_A, loss_B) (Sprint 3)."""
+
+    def test_shape_and_diagonal_symmetry(self):
+        rng = np.random.default_rng(6)
+        n = 10_000
+        times_a = rng.normal(100, 3, n)
+        times_b = rng.normal(100, 3, n)
+        counts_a = np.full(n, 2, dtype=np.int64)
+        counts_b = np.full(n, 1, dtype=np.int64)
+        losses = np.linspace(20.0, 30.0, 9)
+        grid = S.win_rate_grid(times_a, times_b, counts_a, counts_b,
+                               22.0, losses, losses)
+        assert grid.shape == (9, 9)
+        # Monotone in each axis: P(A) rises when A's pits get cheaper.
+        assert np.all(np.diff(grid, axis=1) <= 1e-9)      # along loss_A (cols)
+        assert np.all(np.diff(grid, axis=0) >= -1e-9)      # along loss_B (rows)
