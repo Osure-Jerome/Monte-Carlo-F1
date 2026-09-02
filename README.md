@@ -160,4 +160,4 @@ streamlit run dashboard.py            # -> http://localhost:8501
 
 > **Live URL:** _https://monte-carlo-f1-k8s4iiduvfvch6wm3fecnd.streamlit.app/_
 >
-> **Demo video:** _pending — paste video link here_
+> **Demo video:** _https://drive.google.com/uc?id=1KqGGRSYbfEzHuMyFk-q0ru4jh9CUZ1Ud&export=download_
