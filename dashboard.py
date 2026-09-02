@@ -46,7 +46,10 @@ from f1strategist.engine.race_engine import RaceEngine
 from f1strategist.engine.montecarlo import MonteCarloRunner
 from f1strategist.output.lap_result import LapResult
 from f1strategist.output.run_result import BatchResult
-from f1strategist.repository.simulation_repository import SimulationRepository
+from f1strategist.repository.simulation_repository import (
+    SimulationRepository,
+    resolve_db_path,
+)
 from f1strategist.statistics.statistics_engine import StatisticsEngine
 from f1strategist.strategy.race_strategy import RaceStrategy
 
@@ -54,7 +57,12 @@ st.set_page_config(page_title="Stochastic F1 Race Strategist", layout="wide")
 
 DEFAULT_ITERATIONS = 50_000
 DEFAULT_SEED = 42  # NFR-6: one master seed for BOTH strategies (paired runs)
-DB_PATH = Path(__file__).resolve().parent / "data" / "results.db"
+#: Prefer the repo ``data/`` dir; fall back to a writable temp DB when the
+#: mount is read-only (e.g. Streamlit Cloud), so persist works there too.
+_REPO_DATA_DIR = Path(__file__).resolve().parent / "data"
+DB_PATH = resolve_db_path(_REPO_DATA_DIR / "results.db")
+#: True when the repo data dir was unwritable and we fell back to a temp DB.
+DB_EPHEMERAL = DB_PATH.parent != _REPO_DATA_DIR
 RESULT_KEY = "s3_result"
 
 DEFAULT_STRATEGIES = {
@@ -257,6 +265,11 @@ st.sidebar.divider()
 
 # --- Saved experiments (Day 2: read path from SQLite) ---
 st.sidebar.markdown("#### Saved experiments (SQLite)")
+if DB_EPHEMERAL:
+    st.sidebar.caption(
+        "⚠️ Repo `data/` is read-only on this host — storing to an **ephemeral "
+        f"temp DB** (`{DB_PATH.parent.name}`). Batches last for this session."
+    )
 try:
     with SimulationRepository(DB_PATH) as repo:
         repo.initialize()

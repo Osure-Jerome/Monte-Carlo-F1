@@ -147,6 +147,13 @@ streamlit run dashboard.py            # -> http://localhost:8501
    > No extra setup needed: `dashboard.py` bootstraps the `src/` layout onto
    > `sys.path` itself, so it imports `f1strategist` even though Streamlit Cloud
    > only installs `requirements.txt` (and not `pip install -e .`).
+   >
+   > If Cloud mounts the repo read-only, the app auto-falls back to a writable
+   > **ephemeral** temp DB (`<tmpdir>/f1strategist/results.db`) and labels it as
+   > such in the sidebar — *persist* / *Saved experiments* still work for the
+   > session. To keep a persistent, pre-seeded DB on Cloud instead, point
+   > `SimulationRepository` at a writable external volume and seed it via
+   > `scripts/sprint3_populate_db.py`.
 3. Paste the resulting public URL below, then open it in an **incognito window** to
    confirm it runs with no local dependencies.
 4. Record a ~3-minute walkthrough (Loom/YouTube) and embed the link below.

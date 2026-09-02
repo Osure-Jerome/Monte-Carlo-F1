@@ -69,3 +69,12 @@ Streamlit Cloud). `dashboard.py` therefore runs the vectorised **sequential**
 engine (Sprint 2) on the Run button — fast at the default 50k — while the heavy
 100k seeding keeps parallel execution via `scripts/sprint3_populate_db.py` and the
 CLI. Same engine, identical results; only the parallelism differs.
+
+## Read-only repo mounts (Streamlit Cloud) — DB location fallback
+`SimulationRepository.resolve_db_path` probes the preferred `<repo>/data/`
+directory (mkdir + tempfile probe) and, when it is not writable, falls back to a
+fully writable **ephemeral** `<os-tempdir>/f1strategist/results.db`. The
+dashboard resolves `DB_PATH` once at startup, flags the fallback in the sidebar
+("⚠️ … ephemeral temp DB"), and everything (persist / saved experiments) keeps
+working for the session. Tests: `tests/test_db_path.py` (incl. a chmod-based
+read-only probe + an end-to-end save/load at a temp-style path).

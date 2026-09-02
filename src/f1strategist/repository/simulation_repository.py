@@ -10,7 +10,9 @@ repository importable even when the file is not on disk (e.g. pip installs).
 
 from __future__ import annotations
 
+import os
 import sqlite3
+import tempfile
 from pathlib import Path
 from typing import Any, Optional
 
@@ -115,6 +117,41 @@ CREATE TABLE IF NOT EXISTS lap_result (
 
 CREATE INDEX IF NOT EXISTS idx_lap_run ON lap_result (run_id);
 """
+
+
+def _writable_dir(directory: Path) -> bool:
+    """Probe a directory for real write access (mkdir + create + unlink)."""
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+        fd, probe = tempfile.mkstemp(prefix=".f1strategist_probe_", dir=str(directory))
+        os.close(fd)
+        Path(probe).unlink()
+        return True
+    except OSError:
+        return False
+
+
+def resolve_db_path(preferred: str | Path | None = None, db_name: str = "results.db") -> Path:
+    """Pick a writable SQLite location, falling back to the OS temp dir.
+
+    Serverless runtimes (e.g. Streamlit Cloud) can mount the repo read-only, so
+    the default ``<repo>/data/results.db`` may be unwritable. This resolver
+    probes it and, if needed, returns ``<tempdir>/f1strategist/results.db`` — an
+    ephemeral but fully writable location, so *persist* and *Saved experiments*
+    keep working for the session.
+    """
+    preferred_path = Path(preferred) if preferred is not None else Path(
+        Path(__file__).resolve().parents[3] / "data" / db_name
+    )
+    if _writable_dir(preferred_path.parent):
+        return preferred_path
+    fallback_dir = Path(tempfile.gettempdir()) / "f1strategist"
+    if not _writable_dir(fallback_dir):
+        raise RuntimeError(
+            f"No writable directory for the results database (tried "
+            f"{preferred_path.parent} and {fallback_dir})"
+        )
+    return fallback_dir / preferred_path.name
 
 
 class SimulationRepository:
