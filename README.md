@@ -158,6 +158,6 @@ streamlit run dashboard.py            # -> http://localhost:8501
    confirm it runs with no local dependencies.
 4. Record a ~3-minute walkthrough (Loom/YouTube) and embed the link below.
 
-> **Live URL:** _pending — paste Streamlit Cloud URL here_
+> **Live URL:** _https://monte-carlo-f1-k8s4iiduvfvch6wm3fecnd.streamlit.app/_
 >
 > **Demo video:** _pending — paste video link here_
