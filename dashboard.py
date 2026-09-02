@@ -156,7 +156,7 @@ if "batch_a" in st.session_state:
     fig.update_layout(title="Finishing-time distributions (PDF overlay)",
                       xaxis_title="Total race time (s)", yaxis_title="Density",
                       barmode="overlay")
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     # --- Lap trace (FR-15): first sampled run of each strategy ---
     traces_a = batch_a.sample_traces()
@@ -170,7 +170,7 @@ if "batch_a" in st.session_state:
             trace_fig.add_trace(go.Scatter(x=laps, y=times, mode="lines", name=label))
         trace_fig.update_layout(title="Representative lap trace (lap time vs lap)",
                                 xaxis_title="Lap", yaxis_title="Lap time (s)")
-        st.plotly_chart(trace_fig, use_container_width=True)
+        st.plotly_chart(trace_fig, width="stretch")
     else:
         st.warning("No lap traces stored — run with default sampling (first 100 runs) to see traces.")
 
