@@ -198,6 +198,6 @@ streamlit run dashboard.py     # Mode -> GA optimisation, or use the CLI GA abov
    confirm it runs with no local dependencies.
 4. Record a ~3-minute walkthrough (Loom/YouTube) and embed the link below.
 
-> **Live URL:** _https://monte-carlo-f1-k8s4iiduvfvch6wm3fecnd.streamlit.app/_
+> **Live URL:** _https://monte-carlo-f1-cqgn8cxwzgr4rji2ozz3nv.streamlit.app/_
 >
 > **Demo video:** _https://drive.google.com/uc?id=1KqGGRSYbfEzHuMyFk-q0ru4jh9CUZ1Ud&export=download_
