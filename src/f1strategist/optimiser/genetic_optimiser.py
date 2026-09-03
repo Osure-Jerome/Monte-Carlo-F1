@@ -10,13 +10,17 @@ keeps the optimisation-theory link concrete for the portfolio.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Callable, Optional
 
 import numpy as np
 
 from f1strategist.engine.race_engine import RaceEngine
 from f1strategist.strategy.race_strategy import RaceStrategy
 from f1strategist.strategy.stint import Stint
+
+#: Optional hook called at the end of each generation so a UI can render a
+#: live convergence bar/caption while the search runs.
+ProgressCallback = Callable[[int, float, float], None]
 
 
 @dataclass(slots=True)
@@ -155,8 +159,16 @@ class GeneticOptimiser:
     # ------------------------------------------------------------------
     # Evolution loop
     # ------------------------------------------------------------------
-    def run(self) -> tuple[RaceStrategy, GAHistory]:
-        """Run the GA and return ``(best_strategy, convergence_history)``."""
+    def run(
+        self,
+        progress_callback: Optional[ProgressCallback] = None,
+    ) -> tuple[RaceStrategy, GAHistory]:
+        """Run the GA and return ``(best_strategy, convergence_history)``.
+
+        ``progress_callback(generation_index, best_fitness, avg_fitness)`` is
+        invoked at the end of every generation (optional; used by the
+        dashboard's progress bar, FR-18).
+        """
         rng = np.random.Generator(np.random.PCG64(self.config.master_seed))
         total = self.engine.track.total_laps
         population = self.generate_population(rng)
@@ -165,8 +177,12 @@ class GeneticOptimiser:
         for generation in range(self.config.generations):
             fitnesses = [self.fitness(c) for c in population]
             best_idx = int(np.argmin(fitnesses))
-            history.best_fitness.append(float(fitnesses[best_idx]))
-            history.avg_fitness.append(float(np.mean(fitnesses)))
+            best_fitness = float(fitnesses[best_idx])
+            avg_fitness = float(np.mean(fitnesses))
+            history.best_fitness.append(best_fitness)
+            history.avg_fitness.append(avg_fitness)
+            if progress_callback is not None:
+                progress_callback(generation, best_fitness, avg_fitness)
 
             next_gen = [population[best_idx]]  # elitism: always keep the best
             # Additional elitism slots

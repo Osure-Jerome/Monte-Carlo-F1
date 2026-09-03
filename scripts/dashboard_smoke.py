@@ -1,8 +1,9 @@
-"""Headless dashboard smoke test (Streamlit AppTest) — Sprint 3.
+"""Headless dashboard smoke test (Streamlit AppTest) — Sprint 4.
 
 Covers both data paths of the dashboard:
-  1. "Run Simulation"  -> engine -> MonteCarloRunner -> charts (no DB write by default)
+  1. "Run Simulation"  -> engine -> MonteCarloRunner -> charts (no DB write)
   2. "Load selected from database" -> SimulationRepository.load_batch -> charts
+  3. "Run Genetic Optimisation" (Sprint 4 GA mode) -> convergence + charts
 
 Run:
     python scripts/dashboard_smoke.py
@@ -77,6 +78,38 @@ def main() -> int:
     print(f"Load-from-database flow OK (batch #{target}); metrics: {len(at.metric)}")
     if len(at.metric) < 4:
         print("  FAIL: too few metrics after load")
+        return 1
+
+    # ---- Flow 3: GA optimisation (Sprint 4 bonus) ----
+    mode_radio = next((r for r in at.radio if r.label == "Mode"), None)
+    if mode_radio is None:
+        print("No Mode radio present — dashboard version too old?")
+        return 1
+    mode_radio.set_value("GA optimisation")
+    at.run()
+    if _report_failures(at, "switch to GA mode"):
+        return 1
+
+    # Smallest legal search still proves encode -> evolve -> compare.
+    next(ni for ni in at.number_input if ni.label == "GA population").set_value(10)
+    next(ni for ni in at.number_input if ni.label == "GA generations").set_value(5)
+    next(ni for ni in at.number_input
+         if ni.label == "Fitness runs / evaluation").set_value(500)
+    next(ni for ni in at.number_input
+         if ni.label == "Head-to-head iterations").set_value(1_000)
+    ga_btn = next(b for b in at.button if b.label == "Run Genetic Optimisation")
+    ga_btn.click()
+    at.run()
+    if _report_failures(at, "GA optimisation"):
+        return 1
+
+    print("GA-optimisation flow OK:")
+    for s in at.success:
+        print(f"  success: {s.value[:90]}")
+    labels = [m.label for m in at.metric]
+    print(f"  GA summary metrics: {[l for l in labels if l in ('Discovered strategy', 'Best fitness (mean time)', 'GA advantage vs human', 'Search effort')]}")
+    if not any("Discovered strategy" in lab for lab in labels):
+        print("  FAIL: GA summary metrics missing")
         return 1
     return 0
 

@@ -71,8 +71,10 @@ streamlit run dashboard.py
 - [x] Sprint 2 — stochastic layer + 100k scaling
 - [x] Sprint 3 — interactive dashboard (PDF overlay, sensitivity slider, win-rate line,
       sensitivity heatmap, lap traces) wired to persisted SQLite results
-- [ ] Sprint 3 deploy — Streamlit Cloud URL + demo video (manual steps, see “Deploy” below)
-- [ ] Sprint 4 (bonus) — genetic-algorithm optimisation
+- [x] Sprint 3 deploy — live URL + demo video; read-only Cloud mounts fall back to an
+      ephemeral temp DB so persist/Saved experiments still work
+- [x] Sprint 4 (bonus) — genetic-algorithm optimisation: dashboard GA mode with
+      convergence chart + AI-vs-human head-to-head; GA beats baseline ≥ 0.5 s at 100k
 
 ## Sprint 2 (delivered)
 
@@ -136,6 +138,44 @@ interact — it never re-runs physics on a widget change (NFR-3, NFR-8).
 # Re-seed the DB with the Sprint-2 100k output, then launch
 python scripts/sprint3_populate_db.py --reset
 streamlit run dashboard.py            # -> http://localhost:8501
+```
+
+## Sprint 4 (delivered) — genetic-algorithm optimisation (bonus)
+
+A hand-rolled GA (no DEAP) searches **stint lengths** over the Soft/Medium/Hard
+compounds to minimise mean finishing time (FR-17). Chromosome = stint lengths
+summing to the lap count; tournament selection → blend crossover → Gaussian
+mutation → re-normalisation. A deterministic master seed (NFR-6) means the same
+configuration always reproduces the same optimum.
+
+- **GA mode in the dashboard** — switch *Mode → GA optimisation*, pick a human
+  baseline + search size and watch a live progress bar. Results:
+  - **convergence chart** — best & average fitness per generation (FR-18);
+  - the discovered stint plan and its **GA-vs-human advantage**;
+  - the full head-to-head analysis (PDF overlay, win-rate line, sensitivity
+    heatmap, lap traces) of GA-optimal vs the human baseline (FR-19 / G6).
+- **CLI** — scriptable search + 100k validation (`python -m f1strategist.cli ga --help`):
+
+  ```bash
+  python -m f1strategist.cli ga --track Monaco \
+      --population 40 --generations 20 --fitness-runs 2000 \
+      --iterations 100000 --persist          # saves the batch to results.db
+  ```
+
+- **Validation (Sprint 4 exit criterion — 100k head-to-head, seed 42)**:
+
+  | Track | GA-optimal | Human baseline | GA advantage | P(GA wins) |
+  |---|---|---|---|---|
+  | Monaco | Soft:21,Medium:26,Hard:31 | Medium:40,Hard:38 | **+20.72 s** | 76.1 % |
+  | Monza  | Soft:15,Medium:17,Hard:21 | Medium:35,Hard:18 | **+88.12 s** | 98.3 % |
+
+  → exceeds the ≥ 0.5 s acceptance target on both tracks (GA batches #5/#6 in
+  `data/results.db`, browsable under *Saved experiments*).
+- **Tests** — progress hook, deterministic reproduction, beating a naive
+  Soft-only stint, GA-winner persistence with `source='ga'` (61 total pass).
+
+```bash
+streamlit run dashboard.py     # Mode -> GA optimisation, or use the CLI GA above
 ```
 
 ## Deploy (Day 5 — manual steps)
